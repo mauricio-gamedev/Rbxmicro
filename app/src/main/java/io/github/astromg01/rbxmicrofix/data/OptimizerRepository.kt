@@ -19,8 +19,8 @@ sealed interface OptimizerResult {
     data object Restored : OptimizerResult
     data object NothingToRestore : OptimizerResult
     data object PermissionFailure : OptimizerResult
-    data object OperationFailure : OptimizerResult
-    data object RollbackFailure : OptimizerResult
+    data class OperationFailure(val details: String = "Operação rejeitada pelo Android.") : OptimizerResult
+    data class RollbackFailure(val details: String = "Não foi possível concluir a reversão.") : OptimizerResult
 }
 
 class OptimizerRepository(context: Context) {
@@ -45,7 +45,7 @@ class OptimizerRepository(context: Context) {
             }.getOrNull()
 
             if (restoreResponse != SUCCESS) {
-                return@withContext OptimizerResult.RollbackFailure
+                return@withContext OptimizerResult.RollbackFailure(restoreResponse ?: "Sem resposta ao restaurar o perfil anterior.")
             }
             clearSavedState()
         }
@@ -85,7 +85,7 @@ class OptimizerRepository(context: Context) {
         }.getOrNull()
 
         if (response == null) {
-            return@withContext OptimizerResult.RollbackFailure
+            return@withContext OptimizerResult.RollbackFailure("O serviço Shizuku encerrou a conexão durante a aplicação.")
         }
 
         if (response.startsWith(OK_PREFIX)) {
@@ -121,9 +121,9 @@ class OptimizerRepository(context: Context) {
                 }.getOrNull()
                 if (rollback == SUCCESS) {
                     clearSavedState()
-                    OptimizerResult.OperationFailure
+                    OptimizerResult.OperationFailure("O perfil foi aplicado, mas não foi possível salvar o estado local; a configuração original foi restaurada.")
                 } else {
-                    OptimizerResult.RollbackFailure
+                    OptimizerResult.RollbackFailure(rollback ?: "Falha ao restaurar o perfil após erro de gravação local.")
                 }
             }
         } else {
@@ -140,9 +140,9 @@ class OptimizerRepository(context: Context) {
             }
 
             if (response.startsWith("ERR|rollback_failed")) {
-                OptimizerResult.RollbackFailure
+                OptimizerResult.RollbackFailure(response)
             } else {
-                OptimizerResult.OperationFailure
+                OptimizerResult.OperationFailure(response)
             }
         }
     }
@@ -162,7 +162,7 @@ class OptimizerRepository(context: Context) {
             clearSavedState()
             OptimizerResult.Restored
         } else {
-            OptimizerResult.OperationFailure
+            OptimizerResult.OperationFailure(result ?: "O serviço Shizuku não respondeu à restauração.")
         }
     }
 
