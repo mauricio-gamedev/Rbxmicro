@@ -209,7 +209,7 @@ class MainActivity : ComponentActivity() {
         publishState()
 
         lifecycleScope.launch {
-            when (repository.restore()) {
+            when (val result = repository.restore()) {
                 OptimizerResult.Restored -> statusMessage = "Configuração original restaurada. Reinicie o Roblox para aplicar a restauração."
                 OptimizerResult.NothingToRestore -> statusMessage = "Nenhuma alteração do RbxMicroFix está ativa."
                 OptimizerResult.PermissionFailure -> statusMessage = "Autorize o RbxMicroFix no Shizuku e tente novamente."
