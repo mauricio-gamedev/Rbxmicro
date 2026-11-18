@@ -30,6 +30,7 @@ enum class PerformanceProfile(
 object GameOverlayConfig {
     val allowedDownscaleFactors = setOf("0.9", "0.85", "0.8", "0.75")
     val allowedFpsOverrides = setOf("disable", "60")
+    const val LOADING_BOOST_DURATION_MS = 5_000
 
     /**
      * Replaces only the performance-mode segment and retains every other game mode
@@ -72,6 +73,7 @@ object GameOverlayConfig {
         values["downscaleFactor"] = downscaleFactor
         values["fps"] = fpsOverride
         values["useAngle"] = useAngle.toString()
+        values["loadingBoost"] = LOADING_BOOST_DURATION_MS.toString()
 
         val performanceSegment = values.entries.joinToString(",") { (key, value) -> "$key=$value" }
         return (retained + performanceSegment).joinToString(":")
