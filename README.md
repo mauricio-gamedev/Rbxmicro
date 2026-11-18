@@ -11,8 +11,9 @@ RbxMicroFix configures Android Game Mode interventions for the Roblox package. T
 - `downscaleFactor`: WindowManager backbuffer scaling for the Roblox window.
 - `fps`: optional Android Game Mode frame-rate override (`60` or `disable`).
 - `useAngle`: optional request to route OpenGL ES through ANGLE.
+- `loadingBoost`: Android GameManager loading boost duration, set to 5,000 ms.
 
-The utility then selects the Android `performance` Game Mode for `com.roblox.client`. The new backbuffer scale is picked up when Roblox is restarted. This changes the Android rendering path used by the actual Roblox application; the HTML page is only the control surface.
+The utility then selects the Android `performance` Game Mode for `com.roblox.client`. The new backbuffer scale is picked up when Roblox is restarted. This changes the Android rendering path used by the actual Roblox application; the HTML page is only the control surface. Android's graphics environment notifies GameManager when the game graphics environment is initialized, which can activate the configured loading boost.
 
 Android source references for the intervention keys and implementation are recorded in `docs/ANDROID_GAME_MODE.md`.
 
@@ -29,6 +30,7 @@ Optional micro-corrections:
 
 - 60 FPS override, disabled by default (native Roblox/display frame pacing is kept unless selected).
 - ANGLE driver request through the `useAngle` Game Mode intervention key, disabled by default.
+- 5-second loading boost included automatically in every applied profile.
 
 ## Architecture
 
@@ -73,4 +75,4 @@ GitHub Actions runs the unit tests and creates a debug APK artifact.
 
 ## Validation status
 
-Version 0.2.1 adds the local HTML/native connector and direct Game Mode integration. Unit tests cover overlay composition and allowed profile values. GitHub Actions and physical validation on the Galaxy A06 are the next execution checks; no measured FPS improvement is claimed before those tests.
+Version 0.2.2 adds the local HTML/native connector, direct Game Mode rendering integration and the five-second loading boost setting. Unit tests cover overlay composition, profile values, loading boost and Game Mode parsing. GitHub Actions and physical validation on the Galaxy A06 are the next execution checks; no measured FPS improvement is claimed before those tests.
