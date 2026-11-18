@@ -51,17 +51,17 @@ class OptimizerRepository(context: Context) {
         }
 
         val modeResponse = runCatching { service.currentGameMode }.getOrNull()
-            ?: return@withContext OptimizerResult.OperationFailure
+            ?: return@withContext OptimizerResult.OperationFailure()
         if (!modeResponse.startsWith(OK_PREFIX)) {
-            return@withContext OptimizerResult.OperationFailure
+            return@withContext OptimizerResult.OperationFailure()
         }
         val previousMode = GameModeParser.parseMode(modeResponse.removePrefix(OK_PREFIX))
-            ?: return@withContext OptimizerResult.OperationFailure
+            ?: return@withContext OptimizerResult.OperationFailure()
 
         val overlayResponse = runCatching { service.currentOverlayConfig }.getOrNull()
-            ?: return@withContext OptimizerResult.OperationFailure
+            ?: return@withContext OptimizerResult.OperationFailure()
         if (!overlayResponse.startsWith(OK_PREFIX)) {
-            return@withContext OptimizerResult.OperationFailure
+            return@withContext OptimizerResult.OperationFailure()
         }
         val previousOverlay = overlayResponse.removePrefix(OK_PREFIX).ifBlank { ABSENT_CONFIG }
 
@@ -71,7 +71,7 @@ class OptimizerRepository(context: Context) {
             .putBoolean(KEY_MANAGER_OVERRIDE_ACTIVE, false)
             .commit()
         if (!snapshotSaved) {
-            return@withContext OptimizerResult.OperationFailure
+            return@withContext OptimizerResult.OperationFailure()
         }
 
         val response = runCatching {
@@ -201,7 +201,7 @@ class OptimizerRepository(context: Context) {
         ) {
             OptimizerResult.PermissionFailure
         } else {
-            OptimizerResult.OperationFailure
+            OptimizerResult.OperationFailure()
         }
 
     private fun clearSavedState() {
