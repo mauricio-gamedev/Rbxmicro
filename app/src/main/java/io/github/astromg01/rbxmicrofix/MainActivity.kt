@@ -181,8 +181,10 @@ class MainActivity : ComponentActivity() {
                 is OptimizerResult.Applied -> {
                     statusMessage = buildString {
                         if (result.usedGameManagerOverride) {
-                            append("Perfil ${result.profile.title} aplicado pelo GameManager do Android.")
-                            append(" O backbuffer do Roblox foi configurado. ANGLE e impulso de carregamento não foram incluídos nesta rota.")
+                            append("Perfil ${result.profile.title} aplicado pelo modo Custom do GameManager.")
+                            append(" Escala do backbuffer: ${(result.profile.downscaleFactor.toFloat() * 100).toInt()}%.")
+                            if (result.fps60) append(" Limite de 60 FPS ativado.")
+                            append(" ANGLE e impulso de carregamento não fazem parte desta rota.")
                         } else {
                             append("Perfil ${result.profile.title} aplicado ao perfil gráfico do Roblox.")
                             if (result.extrasConfigured) append(" ANGLE e impulso de carregamento foram incluídos.")
