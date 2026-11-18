@@ -176,12 +176,21 @@ class RbxShellService : IRbxShellService.Stub() {
     }
 
     private fun canSafelyUseCustomModeFallback(): Pair<Boolean, String> {
-        val result = execute(listOf(CMD, "game", "list-configs", ROBLOX_PACKAGE))
-        if (result.exitCode != 0) {
-            return false to "list-configs unavailable: ${describe(result)}"
+        val modes = execute(listOf(CMD, "game", "list-modes", ROBLOX_PACKAGE))
+        if (modes.exitCode != 0) {
+            return false to "Custom Game Mode unavailable: ${describe(modes)}"
         }
-        if (!GameModeParser.reportsNoInterventionConfig(result.output)) {
-            return false to "an existing GameManager intervention was found; refusing to replace it"
+        val availableModes = GameModeParser.parseAvailableModes(modes.output)
+        if (!availableModes.contains(CUSTOM_MODE)) {
+            return false to "Custom Game Mode is not available for Roblox: ${compact(modes.output)}"
+        }
+
+        val configs = execute(listOf(CMD, "game", "list-configs", ROBLOX_PACKAGE))
+        if (configs.exitCode != 0) {
+            return false to "list-configs unavailable: ${describe(configs)}"
+        }
+        if (!GameModeParser.reportsNoInterventionConfig(configs.output)) {
+            return false to "pre-existing GameManager interventions were found; refusing to replace them: ${compact(configs.output)}"
         }
         return true to ""
     }
