@@ -99,6 +99,13 @@ object GameModeParser {
             ?.toSet()
             .orEmpty()
 
+    /**
+     * The shell "set" fallback writes a persistent user override. It is safe to
+     * use only when GameManager confirms there is no existing intervention config.
+     */
+    fun reportsNoInterventionConfig(commandOutput: String): Boolean =
+        commandOutput.contains("no intervention found", ignoreCase = true)
+
     fun modeName(mode: Int): String = when (mode) {
         1 -> "standard"
         2 -> "performance"
