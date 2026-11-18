@@ -12,6 +12,8 @@ sealed interface OptimizerResult {
         val profile: PerformanceProfile,
         val fps60: Boolean,
         val useAngle: Boolean,
+        val usedGameManagerOverride: Boolean,
+        val extrasConfigured: Boolean,
     ) : OptimizerResult
 
     data object Restored : OptimizerResult
@@ -32,69 +34,114 @@ class OptimizerRepository(context: Context) {
     ): OptimizerResult = withContext(Dispatchers.IO) {
         val service = connectOrNull() ?: return@withContext connectionFailure()
 
-        var previousMode = preferences.getString(KEY_PREVIOUS_MODE, null)
-        var previousOverlay = preferences.getString(KEY_PREVIOUS_OVERLAY, null)
+        // A new profile starts from the original device state, never on top of
+        // a previous RbxMicroFix override.
+        if (canRestore()) {
+            val previousMode = preferences.getString(KEY_PREVIOUS_MODE, "0") ?: "0"
+            val previousOverlay = preferences.getString(KEY_PREVIOUS_OVERLAY, ABSENT_CONFIG) ?: ABSENT_CONFIG
+            val hadManagerOverride = preferences.getBoolean(KEY_MANAGER_OVERRIDE_ACTIVE, false)
+            val restoreResponse = runCatching {
+                service.restoreOriginalState(previousMode, previousOverlay, hadManagerOverride)
+            }.getOrNull()
 
-        if (!canRestore()) {
-            val modeResponse = runCatching { service.currentGameMode }.getOrNull()
-                ?: return@withContext OptimizerResult.OperationFailure
-            if (!modeResponse.startsWith(OK_PREFIX)) return@withContext OptimizerResult.OperationFailure
-            val mode = GameModeParser.parseMode(modeResponse.removePrefix(OK_PREFIX))
-                ?: return@withContext OptimizerResult.OperationFailure
-
-            val overlayResponse = runCatching { service.currentOverlayConfig }.getOrNull()
-                ?: return@withContext OptimizerResult.OperationFailure
-            if (!overlayResponse.startsWith(OK_PREFIX)) return@withContext OptimizerResult.OperationFailure
-            val overlay = overlayResponse.removePrefix(OK_PREFIX).ifBlank { ABSENT_CONFIG }
-
-            val saved = preferences.edit()
-                .putString(KEY_PREVIOUS_MODE, mode.toString())
-                .putString(KEY_PREVIOUS_OVERLAY, overlay)
-                .commit()
-            if (!saved) return@withContext OptimizerResult.OperationFailure
-
-            previousMode = mode.toString()
-            previousOverlay = overlay
+            if (restoreResponse != SUCCESS) {
+                return@withContext OptimizerResult.RollbackFailure
+            }
+            clearSavedState()
         }
 
-        val modeSnapshot = previousMode ?: return@withContext OptimizerResult.OperationFailure
-        val overlaySnapshot = previousOverlay ?: return@withContext OptimizerResult.OperationFailure
+        val modeResponse = runCatching { service.currentGameMode }.getOrNull()
+            ?: return@withContext OptimizerResult.OperationFailure
+        if (!modeResponse.startsWith(OK_PREFIX)) {
+            return@withContext OptimizerResult.OperationFailure
+        }
+        val previousMode = GameModeParser.parseMode(modeResponse.removePrefix(OK_PREFIX))
+            ?: return@withContext OptimizerResult.OperationFailure
+
+        val overlayResponse = runCatching { service.currentOverlayConfig }.getOrNull()
+            ?: return@withContext OptimizerResult.OperationFailure
+        if (!overlayResponse.startsWith(OK_PREFIX)) {
+            return@withContext OptimizerResult.OperationFailure
+        }
+        val previousOverlay = overlayResponse.removePrefix(OK_PREFIX).ifBlank { ABSENT_CONFIG }
+
+        val snapshotSaved = preferences.edit()
+            .putString(KEY_PREVIOUS_MODE, previousMode.toString())
+            .putString(KEY_PREVIOUS_OVERLAY, previousOverlay)
+            .putBoolean(KEY_MANAGER_OVERRIDE_ACTIVE, false)
+            .commit()
+        if (!snapshotSaved) {
+            return@withContext OptimizerResult.OperationFailure
+        }
+
         val response = runCatching {
             service.applyRenderingProfile(
                 profile.downscaleFactor,
                 if (fps60) FPS_60 else FPS_NATIVE,
                 useAngle,
-                modeSnapshot,
-                overlaySnapshot,
+                previousMode.toString(),
+                previousOverlay,
             )
         }.getOrNull()
 
-        when (response) {
-            SUCCESS -> {
-                val persisted = preferences.edit()
-                    .putBoolean(KEY_PROFILE_ACTIVE, true)
-                    .putString(KEY_ACTIVE_PROFILE, profile.name)
-                    .putBoolean(KEY_FPS_60, fps60)
-                    .putBoolean(KEY_USE_ANGLE, useAngle)
-                    .commit()
-                if (persisted) {
-                    OptimizerResult.Applied(profile, fps60, useAngle)
+        if (response == null) {
+            return@withContext OptimizerResult.RollbackFailure
+        }
+
+        if (response.startsWith(OK_PREFIX)) {
+            val route = response.split('|').getOrNull(1).orEmpty()
+            val usedManagerOverride = route == GAME_MANAGER_ROUTE
+            val extrasConfigured = response.contains("extras=1")
+            val actualAngle = useAngle && extrasConfigured && !usedManagerOverride
+
+            val persisted = preferences.edit()
+                .putBoolean(KEY_PROFILE_ACTIVE, true)
+                .putString(KEY_ACTIVE_PROFILE, profile.name)
+                .putBoolean(KEY_FPS_60, fps60)
+                .putBoolean(KEY_USE_ANGLE, actualAngle)
+                .putBoolean(KEY_EXTRAS_CONFIGURED, extrasConfigured && !usedManagerOverride)
+                .putBoolean(KEY_MANAGER_OVERRIDE_ACTIVE, usedManagerOverride)
+                .commit()
+
+            if (persisted) {
+                OptimizerResult.Applied(
+                    profile = profile,
+                    fps60 = fps60,
+                    useAngle = actualAngle,
+                    usedGameManagerOverride = usedManagerOverride,
+                    extrasConfigured = extrasConfigured && !usedManagerOverride,
+                )
+            } else {
+                val rollback = runCatching {
+                    service.restoreOriginalState(
+                        previousMode.toString(),
+                        previousOverlay,
+                        usedManagerOverride,
+                    )
+                }.getOrNull()
+                if (rollback == SUCCESS) {
+                    clearSavedState()
+                    OptimizerResult.OperationFailure
                 } else {
-                    val rollback = runCatching {
-                        service.restoreOriginalState(modeSnapshot, overlaySnapshot)
-                    }.getOrNull()
-                    if (rollback == SUCCESS) {
-                        clearSavedState()
-                        OptimizerResult.OperationFailure
-                    } else {
-                        OptimizerResult.RollbackFailure
-                    }
+                    OptimizerResult.RollbackFailure
                 }
             }
-            ROLLBACK_FAILED -> OptimizerResult.RollbackFailure
-            else -> {
-                // The remote service rolls back partial changes before returning a failure.
+        } else {
+            val rollbackCompleted = response.contains("rollback=ok")
+            if (rollbackCompleted) {
                 clearSavedState()
+            } else {
+                preferences.edit()
+                    .putBoolean(
+                        KEY_MANAGER_OVERRIDE_ACTIVE,
+                        response.contains("manager_override_possible=1"),
+                    )
+                    .commit()
+            }
+
+            if (response.startsWith("ERR|rollback_failed")) {
+                OptimizerResult.RollbackFailure
+            } else {
                 OptimizerResult.OperationFailure
             }
         }
@@ -103,11 +150,12 @@ class OptimizerRepository(context: Context) {
     suspend fun restore(): OptimizerResult = withContext(Dispatchers.IO) {
         if (!canRestore()) return@withContext OptimizerResult.NothingToRestore
 
-        val previousMode = preferences.getString(KEY_PREVIOUS_MODE, "1") ?: "1"
+        val previousMode = preferences.getString(KEY_PREVIOUS_MODE, "0") ?: "0"
         val previousOverlay = preferences.getString(KEY_PREVIOUS_OVERLAY, ABSENT_CONFIG) ?: ABSENT_CONFIG
+        val hadManagerOverride = preferences.getBoolean(KEY_MANAGER_OVERRIDE_ACTIVE, false)
         val service = connectOrNull() ?: return@withContext connectionFailure()
         val result = runCatching {
-            service.restoreOriginalState(previousMode, previousOverlay)
+            service.restoreOriginalState(previousMode, previousOverlay, hadManagerOverride)
         }.getOrNull()
 
         if (result == SUCCESS) {
@@ -130,8 +178,8 @@ class OptimizerRepository(context: Context) {
     }
 
     fun fps60Enabled(): Boolean = preferences.getBoolean(KEY_FPS_60, false)
-
     fun angleEnabled(): Boolean = preferences.getBoolean(KEY_USE_ANGLE, false)
+    fun loadingBoostConfigured(): Boolean = preferences.getBoolean(KEY_EXTRAS_CONFIGURED, false)
 
     fun canRestore(): Boolean =
         preferences.contains(KEY_PREVIOUS_MODE) && preferences.contains(KEY_PREVIOUS_OVERLAY)
@@ -164,6 +212,8 @@ class OptimizerRepository(context: Context) {
             .putBoolean(KEY_PROFILE_ACTIVE, false)
             .putBoolean(KEY_FPS_60, false)
             .putBoolean(KEY_USE_ANGLE, false)
+            .putBoolean(KEY_EXTRAS_CONFIGURED, false)
+            .putBoolean(KEY_MANAGER_OVERRIDE_ACTIVE, false)
             .commit()
     }
 
@@ -175,11 +225,13 @@ class OptimizerRepository(context: Context) {
         const val KEY_PREVIOUS_OVERLAY = "previous_game_overlay"
         const val KEY_FPS_60 = "fps_60_enabled"
         const val KEY_USE_ANGLE = "use_angle_enabled"
+        const val KEY_EXTRAS_CONFIGURED = "extras_configured"
+        const val KEY_MANAGER_OVERRIDE_ACTIVE = "manager_override_active"
         const val OK_PREFIX = "OK|"
         const val SUCCESS = "OK"
-        const val ROLLBACK_FAILED = "ERR|rollback_failed"
         const val ABSENT_CONFIG = "null"
         const val FPS_60 = "60"
         const val FPS_NATIVE = "disable"
+        const val GAME_MANAGER_ROUTE = "game_manager_override"
     }
 }

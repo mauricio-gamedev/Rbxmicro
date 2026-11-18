@@ -26,7 +26,7 @@ class ShizukuGateway(context: Context) {
         .daemon(false)
         .processNameSuffix("rbx_engine")
         .debuggable(BuildConfig.DEBUG)
-        .version(2)
+        .version(3)
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {

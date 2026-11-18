@@ -13,6 +13,10 @@ interface IRbxShellService {
         String previousGameMode,
         String previousOverlayConfig
     ) = 4;
-    String restoreOriginalState(String previousGameMode, String previousOverlayConfig) = 5;
+    String restoreOriginalState(
+        String previousGameMode,
+        String previousOverlayConfig,
+        boolean hadManagerOverride
+    ) = 5;
     String forceStopRoblox() = 6;
 }

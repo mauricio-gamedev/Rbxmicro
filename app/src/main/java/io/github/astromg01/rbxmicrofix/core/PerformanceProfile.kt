@@ -5,26 +5,10 @@ enum class PerformanceProfile(
     val description: String,
     val downscaleFactor: String,
 ) {
-    QUALITY(
-        title = "Nitidez",
-        description = "Redução leve da carga de renderização.",
-        downscaleFactor = "0.9",
-    ),
-    HYBRID(
-        title = "Equilibrado",
-        description = "Equilíbrio entre definição e carga gráfica.",
-        downscaleFactor = "0.85",
-    ),
-    PERFORMANCE(
-        title = "Desempenho",
-        description = "Reduz a carga de renderização mantendo boa definição.",
-        downscaleFactor = "0.8",
-    ),
-    MAX_PERFORMANCE(
-        title = "Máximo",
-        description = "Redução mais intensa do backbuffer para aliviar a GPU.",
-        downscaleFactor = "0.75",
-    ),
+    QUALITY("Nitidez", "Redução leve da carga de renderização.", "0.9"),
+    HYBRID("Equilibrado", "Equilíbrio entre definição e carga gráfica.", "0.85"),
+    PERFORMANCE("Desempenho", "Reduz a carga de renderização mantendo boa definição.", "0.8"),
+    MAX_PERFORMANCE("Máximo", "Redução mais intensa do backbuffer para aliviar a GPU.", "0.75"),
 }
 
 object GameOverlayConfig {
@@ -32,10 +16,6 @@ object GameOverlayConfig {
     val allowedFpsOverrides = setOf("disable", "60")
     const val LOADING_BOOST_DURATION_MS = 5_000
 
-    /**
-     * Replaces only the performance-mode segment and retains every other game mode
-     * and unknown key from the existing DeviceConfig value.
-     */
     fun withPerformanceProfile(
         original: String?,
         downscaleFactor: String,
@@ -93,6 +73,10 @@ object GameModeParser {
         "current mode\\s*:\\s*(unsupported|standard|performance|battery|custom|[0-4])",
         RegexOption.IGNORE_CASE,
     )
+    private val availableModesPattern = Regex(
+        "available game modes\\s*:\\s*\\[([^\\]]*)\\]",
+        RegexOption.IGNORE_CASE,
+    )
 
     fun parseMode(raw: String): Int? = when (raw.trim().lowercase()) {
         "unsupported" -> 0
@@ -105,6 +89,15 @@ object GameModeParser {
 
     fun parseCurrentMode(commandOutput: String): Int? =
         currentModePattern.find(commandOutput)?.groupValues?.getOrNull(1)?.let(::parseMode)
+
+    fun parseAvailableModes(commandOutput: String): Set<Int> =
+        availableModesPattern.find(commandOutput)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.split(',')
+            ?.mapNotNull(::parseMode)
+            ?.toSet()
+            .orEmpty()
 
     fun modeName(mode: Int): String = when (mode) {
         1 -> "standard"

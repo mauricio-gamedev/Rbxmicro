@@ -11,13 +11,14 @@ class RbxShellService : IRbxShellService.Stub() {
     override fun getCurrentGameMode(): String {
         val result = execute(listOf(CMD, "game", "list-modes", ROBLOX_PACKAGE))
         val mode = if (result.exitCode == 0) GameModeParser.parseCurrentMode(result.output) else null
-        return mode?.let { "OK|$it" } ?: "ERR|game_mode_unavailable"
+        return mode?.let { "OK|$it" }
+            ?: "ERR|game_mode_unavailable|${describe(result)}"
     }
 
     override fun getCurrentOverlayConfig(): String =
         execute(listOf(DEVICE_CONFIG, "get", GAME_OVERLAY_NAMESPACE, ROBLOX_PACKAGE)).let { result ->
             if (result.exitCode == 0) "OK|${result.output.ifBlank { ABSENT_CONFIG }}"
-            else "ERR|overlay_read_failed"
+            else "ERR|overlay_read_failed|${describe(result)}"
         }
 
     override fun applyRenderingProfile(
@@ -30,8 +31,10 @@ class RbxShellService : IRbxShellService.Stub() {
         if (downscaleFactor !in GameOverlayConfig.allowedDownscaleFactors) return "ERR|invalid_scale"
         if (fpsOverride !in GameOverlayConfig.allowedFpsOverrides) return "ERR|invalid_fps"
 
-        val previousMode = previousGameMode.toIntOrNull()?.takeIf { it in 0..4 } ?: STANDARD_MODE
-        val originalOverlay = previousOverlayConfig.takeUnless { it == ABSENT_CONFIG }.orEmpty()
+        val previousMode = previousGameMode.toIntOrNull()?.takeIf { it in 0..4 }
+            ?: return "ERR|invalid_previous_mode"
+        val originalOverlayWasAbsent = previousOverlayConfig == ABSENT_CONFIG
+        val originalOverlay = previousOverlayConfig.takeUnless { originalOverlayWasAbsent }.orEmpty()
         val nextOverlay = runCatching {
             GameOverlayConfig.withPerformanceProfile(
                 original = originalOverlay,
@@ -41,61 +44,107 @@ class RbxShellService : IRbxShellService.Stub() {
             )
         }.getOrElse { return "ERR|invalid_overlay" }
 
-        val write = execute(listOf(DEVICE_CONFIG, "put", GAME_OVERLAY_NAMESPACE, ROBLOX_PACKAGE, nextOverlay))
-        if (write.exitCode != 0) {
-            val overlayRestored = restoreOverlay(originalOverlay)
-            val modeRestored = restoreGameMode(previousMode)
-            return if (overlayRestored && modeRestored) "ERR|overlay_write_failed" else "ERR|rollback_failed"
-        }
+        var overlayChanged = false
+        var directFailure = "not_attempted"
+        var managerOverrideAttempted = false
 
-        // DeviceConfig notifies GameManagerService asynchronously. Retry the mode
-        // switch briefly so the new mode=2 intervention is available before selection.
-        var modeResult = ShellResult(-1, "not_attempted")
-        for (attempt in 0 until MODE_SWITCH_ATTEMPTS) {
-            if (attempt > 0) Thread.sleep(MODE_SWITCH_DELAY_MS)
-            modeResult = execute(listOf(CMD, "game", "mode", "performance", ROBLOX_PACKAGE))
-            if (modeResult.exitCode == 0) break
-        }
-
-        if (modeResult.exitCode != 0) {
-            val overlayRestored = restoreOverlay(originalOverlay)
-            val modeRestored = restoreGameMode(previousMode)
-            return if (overlayRestored && modeRestored) "ERR|mode_switch_failed" else "ERR|rollback_failed"
-        }
-
-        val confirmedMode = GameModeParser.parseCurrentMode(
-            execute(listOf(CMD, "game", "list-modes", ROBLOX_PACKAGE)).output,
+        // Preferred route: write the complete per-package overlay so ANGLE and
+        // loadingBoost are included alongside backbuffer scaling and FPS.
+        val write = execute(
+            listOf(DEVICE_CONFIG, "put", GAME_OVERLAY_NAMESPACE, ROBLOX_PACKAGE, nextOverlay),
         )
-        if (confirmedMode != PERFORMANCE_MODE) {
-            val overlayRestored = restoreOverlay(originalOverlay)
-            val modeRestored = restoreGameMode(previousMode)
-            return if (overlayRestored && modeRestored) "ERR|mode_not_selected" else "ERR|rollback_failed"
+        if (write.exitCode == 0) {
+            overlayChanged = true
+            if (waitForOverlayValue(nextOverlay)) {
+                val selected = selectPerformanceMode()
+                if (selected.first) {
+                    return "OK|device_config|extras=1"
+                }
+                directFailure = selected.second
+            } else {
+                directFailure = "DeviceConfig put returned success, but the stored value did not match the requested profile"
+            }
+        } else {
+            directFailure = "DeviceConfig put: ${describe(write)}"
+            val current = currentOverlayValue()
+            overlayChanged = current != null &&
+                current != if (originalOverlayWasAbsent) ABSENT_CONFIG else originalOverlay
         }
 
-        return "OK"
+        // Fallback route: GameManagerService's own API. It applies a real mode-2
+        // downscale/FPS override and selects that mode as part of the operation.
+        // Android expects "disable" (not numeric zero) when no FPS cap is requested.
+        val fpsArgument = if (fpsOverride == FPS_60) FPS_60 else FPS_DISABLED
+        val managerApply = execute(
+            listOf(
+                CMD, "game", "set",
+                "--mode", PERFORMANCE_MODE.toString(),
+                "--downscale", downscaleFactor,
+                "--fps", fpsArgument,
+                ROBLOX_PACKAGE,
+            ),
+        )
+
+        val managerOverrideCreated = managerApply.exitCode == 0
+        if (managerOverrideCreated && waitForMode(PERFORMANCE_MODE)) {
+            // GameManagerService's override takes precedence for this mode. Restore
+            // the temporary DeviceConfig write so it does not leave a shadow profile.
+            val cleanup = if (overlayChanged) {
+                restoreOverlay(originalOverlay, originalOverlayWasAbsent)
+            } else {
+                true
+            }
+            return if (cleanup) {
+                "OK|game_manager_override|extras=0"
+            } else {
+                "OK|game_manager_override|extras=0|overlay_cleanup_pending"
+            }
+        }
+
+        val managerFailure = describe(managerApply)
+        val rollback = rollback(
+            previousMode = previousMode,
+            originalOverlay = originalOverlay,
+            originalOverlayWasAbsent = originalOverlayWasAbsent,
+            overlayChanged = overlayChanged,
+            managerOverrideMayExist = managerOverrideCreated,
+        )
+
+        return if (rollback) {
+            "ERR|apply_failed|direct=${compact(directFailure)}|game_manager=${compact(managerFailure)}|rollback=ok"
+        } else {
+            "ERR|rollback_failed|manager_override_possible=1|direct=${compact(directFailure)}|game_manager=${compact(managerFailure)}|overlay=${describeOverlayState(originalOverlay, originalOverlayWasAbsent)}|mode=${describeModeState(previousMode)}"
+        }
     }
 
     override fun restoreOriginalState(
         previousGameMode: String,
         previousOverlayConfig: String,
+        hadManagerOverride: Boolean,
     ): String {
-        val previousMode = previousGameMode.toIntOrNull()?.takeIf { it in 0..4 } ?: STANDARD_MODE
-        val overlayValue = previousOverlayConfig.takeUnless { it == ABSENT_CONFIG }
+        val previousMode = previousGameMode.toIntOrNull()?.takeIf { it in 0..4 }
+            ?: return "ERR|invalid_previous_mode"
+        val originalOverlayWasAbsent = previousOverlayConfig == ABSENT_CONFIG
+        val originalOverlay = previousOverlayConfig.takeUnless { originalOverlayWasAbsent }.orEmpty()
 
-        val overlayRestored = restoreOverlay(overlayValue.orEmpty(), wasAbsent = overlayValue == null)
-        val modeRestored = restoreGameMode(previousMode)
+        val rollback = rollback(
+            previousMode = previousMode,
+            originalOverlay = originalOverlay,
+            originalOverlayWasAbsent = originalOverlayWasAbsent,
+            overlayChanged = true,
+            managerOverrideMayExist = hadManagerOverride,
+        )
 
-        return when {
-            overlayRestored && modeRestored -> "OK"
-            !overlayRestored && !modeRestored -> "ERR|overlay_and_mode_restore_failed"
-            !overlayRestored -> "ERR|overlay_restore_failed"
-            else -> "ERR|mode_restore_failed"
+        return if (rollback) {
+            "OK"
+        } else {
+            "ERR|restore_incomplete|manager_override=${if (hadManagerOverride) 1 else 0}|overlay=${describeOverlayState(originalOverlay, originalOverlayWasAbsent)}|mode=${describeModeState(previousMode)}"
         }
     }
 
     override fun forceStopRoblox(): String {
         val result = execute(listOf(AM, "force-stop", ROBLOX_PACKAGE))
-        return if (result.exitCode == 0) "OK" else "ERR|client_restart_failed"
+        return if (result.exitCode == 0) "OK" else "ERR|client_restart_failed|${describe(result)}"
     }
 
     override fun destroy() {
@@ -106,26 +155,122 @@ class RbxShellService : IRbxShellService.Stub() {
         destroy()
     }
 
-    private fun restoreOverlay(value: String, wasAbsent: Boolean = value.isEmpty()): Boolean {
+    private fun selectPerformanceMode(): Pair<Boolean, String> {
+        repeat(MODE_SELECT_ATTEMPTS) { attempt ->
+            val list = execute(listOf(CMD, "game", "list-modes", ROBLOX_PACKAGE))
+            if (list.exitCode != 0) {
+                if (attempt == MODE_SELECT_ATTEMPTS - 1) {
+                    return false to "Game Mode list: ${describe(list)}"
+                }
+            } else {
+                val available = GameModeParser.parseAvailableModes(list.output)
+                if (available.contains(PERFORMANCE_MODE)) {
+                    val selection = execute(listOf(CMD, "game", "mode", "performance", ROBLOX_PACKAGE))
+                    if (selection.exitCode == 0 && waitForMode(PERFORMANCE_MODE)) {
+                        return true to ""
+                    }
+                    if (selection.exitCode != 0 && attempt == MODE_SELECT_ATTEMPTS - 1) {
+                        return false to "Game Mode performance rejected: ${describe(selection)}"
+                    }
+                }
+            }
+            Thread.sleep(MODE_RETRY_DELAY_MS)
+        }
+        return false to "Performance mode did not become available after DeviceConfig update"
+    }
+
+    private fun waitForOverlayValue(expected: String): Boolean {
+        repeat(OVERLAY_VERIFY_ATTEMPTS) {
+            if (currentOverlayValue() == expected) return true
+            Thread.sleep(OVERLAY_VERIFY_DELAY_MS)
+        }
+        return false
+    }
+
+    private fun waitForMode(expected: Int): Boolean {
+        repeat(MODE_VERIFY_ATTEMPTS) {
+            val result = execute(listOf(CMD, "game", "list-modes", ROBLOX_PACKAGE))
+            if (result.exitCode == 0 && GameModeParser.parseCurrentMode(result.output) == expected) {
+                return true
+            }
+            Thread.sleep(MODE_VERIFY_DELAY_MS)
+        }
+        return false
+    }
+
+    private fun currentOverlayValue(): String? {
+        val result = execute(listOf(DEVICE_CONFIG, "get", GAME_OVERLAY_NAMESPACE, ROBLOX_PACKAGE))
+        if (result.exitCode != 0) return null
+        return result.output.ifBlank { ABSENT_CONFIG }
+    }
+
+    private fun rollback(
+        previousMode: Int,
+        originalOverlay: String,
+        originalOverlayWasAbsent: Boolean,
+        overlayChanged: Boolean,
+        managerOverrideMayExist: Boolean,
+    ): Boolean {
+        val managerReset = if (managerOverrideMayExist) {
+            resetGameManagerOverride().exitCode == 0
+        } else {
+            true
+        }
+
+        val overlayRestored = if (overlayChanged) {
+            restoreOverlay(originalOverlay, originalOverlayWasAbsent)
+        } else {
+            true
+        }
+        val modeRestored = restoreGameMode(previousMode)
+        return managerReset && overlayRestored && modeRestored
+    }
+
+    private fun resetGameManagerOverride(): ShellResult =
+        execute(listOf(CMD, "game", "reset", "--mode", "performance", ROBLOX_PACKAGE))
+
+    private fun restoreOverlay(original: String, wasAbsent: Boolean): Boolean {
+        val expected = if (wasAbsent) ABSENT_CONFIG else original
+        val current = currentOverlayValue()
+        if (current != null && current == expected) return true
+
         val result = if (wasAbsent) {
             execute(listOf(DEVICE_CONFIG, "delete", GAME_OVERLAY_NAMESPACE, ROBLOX_PACKAGE))
         } else {
-            execute(listOf(DEVICE_CONFIG, "put", GAME_OVERLAY_NAMESPACE, ROBLOX_PACKAGE, value))
+            execute(listOf(DEVICE_CONFIG, "put", GAME_OVERLAY_NAMESPACE, ROBLOX_PACKAGE, original))
         }
-        return result.exitCode == 0
+        return result.exitCode == 0 && waitForOverlayValue(expected)
     }
 
     private fun restoreGameMode(mode: Int): Boolean {
-        // GAME_MODE_UNSUPPORTED is not selectable. Standard is the platform default.
-        val effectiveMode = if (mode == UNSUPPORTED_MODE) STANDARD_MODE else mode
-        val modeName = when (effectiveMode) {
+        // "unsupported" is a derived state, not a selectable Game Mode.
+        if (mode == UNSUPPORTED_MODE) return waitForMode(UNSUPPORTED_MODE)
+
+        val modeName = when (mode) {
             PERFORMANCE_MODE -> "performance"
             BATTERY_MODE -> "battery"
             CUSTOM_MODE -> "custom"
             else -> "standard"
         }
-        return execute(listOf(CMD, "game", "mode", modeName, ROBLOX_PACKAGE)).exitCode == 0
+        val result = execute(listOf(CMD, "game", "mode", modeName, ROBLOX_PACKAGE))
+        return result.exitCode == 0 && waitForMode(mode)
     }
+
+    private fun describeOverlayState(original: String, wasAbsent: Boolean): String {
+        val expected = if (wasAbsent) ABSENT_CONFIG else original
+        return if (currentOverlayValue() == expected) "restored" else "not_restored"
+    }
+
+    private fun describeModeState(previousMode: Int): String =
+        GameModeParser.parseCurrentMode(
+            execute(listOf(CMD, "game", "list-modes", ROBLOX_PACKAGE)).output,
+        )?.let { if (it == previousMode) "restored" else "not_restored" } ?: "unknown"
+
+    private fun describe(result: ShellResult): String =
+        "exit=${result.exitCode}, output=${compact(result.output)}"
+
+    private fun compact(value: String): String =
+        value.replace(Regex("\\s+"), " ").take(MAX_ERROR_LENGTH).ifBlank { "no_output" }
 
     private fun execute(arguments: List<String>): ShellResult {
         return try {
@@ -135,7 +280,7 @@ class RbxShellService : IRbxShellService.Stub() {
             val completed = process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) {
                 process.destroyForcibly()
-                return ShellResult(-1, "timeout")
+                return ShellResult(-1, "timeout: ${arguments.take(3).joinToString(" ")}")
             }
             val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
             ShellResult(process.exitValue(), output)
@@ -143,7 +288,7 @@ class RbxShellService : IRbxShellService.Stub() {
             Thread.currentThread().interrupt()
             ShellResult(-1, "interrupted")
         } catch (error: Throwable) {
-            ShellResult(-1, error.javaClass.simpleName)
+            ShellResult(-1, "${error.javaClass.simpleName}: ${error.message.orEmpty()}")
         }
     }
 
@@ -156,11 +301,17 @@ class RbxShellService : IRbxShellService.Stub() {
         const val DEVICE_CONFIG = "/system/bin/device_config"
         const val AM = "/system/bin/am"
         const val COMMAND_TIMEOUT_SECONDS = 8L
-        const val MODE_SWITCH_ATTEMPTS = 5
-        const val MODE_SWITCH_DELAY_MS = 250L
+        const val MODE_SELECT_ATTEMPTS = 16
+        const val MODE_RETRY_DELAY_MS = 300L
+        const val MODE_VERIFY_ATTEMPTS = 10
+        const val MODE_VERIFY_DELAY_MS = 250L
+        const val OVERLAY_VERIFY_ATTEMPTS = 10
+        const val OVERLAY_VERIFY_DELAY_MS = 200L
+        const val MAX_ERROR_LENGTH = 170
         const val ABSENT_CONFIG = "null"
+        const val FPS_60 = "60"
+        const val FPS_DISABLED = "disable"
         const val UNSUPPORTED_MODE = 0
-        const val STANDARD_MODE = 1
         const val PERFORMANCE_MODE = 2
         const val BATTERY_MODE = 3
         const val CUSTOM_MODE = 4

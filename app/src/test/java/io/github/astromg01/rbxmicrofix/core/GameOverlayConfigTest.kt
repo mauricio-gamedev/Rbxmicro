@@ -83,4 +83,16 @@ class PerformanceProfileTest {
             ),
         )
     }
+
+    @Test
+    fun parsesAvailableModesFromAospListModesOutput() {
+        val output = "com.roblox.client current mode: unsupported, available game modes: [standard, performance, battery]"
+        assertEquals(setOf(1, 2, 3), GameModeParser.parseAvailableModes(output))
+    }
+
+    @Test
+    fun parsesNumericAvailableModes() {
+        val output = "com.roblox.client current mode: 0, available game modes: [1, 2, 3]"
+        assertEquals(setOf(1, 2, 3), GameModeParser.parseAvailableModes(output))
+    }
 }
