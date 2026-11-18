@@ -95,4 +95,29 @@ class PerformanceProfileTest {
         val output = "com.roblox.client current mode: 0, available game modes: [1, 2, 3]"
         assertEquals(setOf(1, 2, 3), GameModeParser.parseAvailableModes(output))
     }
+
+    @Test
+    fun parsesCustomModeAsSupportedByAndroid() {
+        val output = "com.roblox.client current mode: unsupported, available game modes: [standard, custom]"
+        assertEquals(setOf(1, 4), GameModeParser.parseAvailableModes(output))
+    }
+
+    @Test
+    fun detectsWhenGameManagerHasNoExistingInterventionToOverwrite() {
+        assertTrue(
+            GameModeParser.reportsNoInterventionConfig(
+                "No intervention found for package com.roblox.client",
+            ),
+        )
+    }
+
+    @Test
+    fun doesNotAllowCustomFallbackWhenAnExistingInterventionIsPresent() {
+        assertTrue(
+            !GameModeParser.reportsNoInterventionConfig(
+                "Name:com.roblox.client Modes: {4=[Game Mode:4,Scaling:0.9,Fps:60]}",
+            ),
+        )
+        assertTrue(!GameModeParser.reportsNoInterventionConfig(""))
+    }
 }
