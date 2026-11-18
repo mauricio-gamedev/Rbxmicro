@@ -106,9 +106,15 @@ class PerformanceProfileTest {
     fun detectsWhenGameManagerHasNoExistingInterventionToOverwrite() {
         assertTrue(
             GameModeParser.reportsNoInterventionConfig(
-                "No intervention found for package com.roblox.client",
+                "No interventions found for com.roblox.client",
             ),
         )
+    }
+
+    @Test
+    fun recognizesSingularAndPluralNoInterventionResponses() {
+        assertTrue(GameModeParser.reportsNoInterventionConfig("No intervention found for package"))
+        assertTrue(GameModeParser.reportsNoInterventionConfig("No interventions found for package"))
     }
 
     @Test
