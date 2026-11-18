@@ -64,14 +64,15 @@
     .profile-title { display:flex;align-items:center;gap:8px;font-size:14px;font-weight:850; }
     .profile-desc { color:var(--muted);font-size:10px;line-height:1.45;margin-top:4px; }
     .scale { color:#d2cbff;font-size:13px;font-weight:900;white-space:nowrap; }
-    .badge { padding:3px 6px;border-radius:6px;background:rgba(115,224,194,.12);color:#85e4c4;font-size:8px;letter-spacing:.65px; }
+    .badge { padding:3px 6px;border-radius:6px;background:rgba(115,224,194,.12);color:#85e4c4;font-size:8px;letter-spacing:.65px;white-space:nowrap; }
+    .badge-muted { background:rgba(146,155,176,.10);color:var(--muted); }
     .settings { border:1px solid var(--line);border-radius:19px;background:rgba(18,23,36,.86);overflow:hidden; }
     .setting { display:flex;align-items:center;gap:13px;padding:15px 15px; }
     .setting + .setting { border-top:1px solid var(--line); }
     .setting-icon { width:33px;height:33px;border-radius:11px;background:#20283a;display:grid;place-items:center;color:#b9b0ff;font-size:14px;font-weight:900; }
     .setting-copy { flex:1;min-width:0; }
-    .setting-title { font-weight:800;font-size:12px; }
-    .setting-desc { margin-top:4px;color:var(--muted);font-size:10px;line-height:1.4; }
+    .setting-title { display:block;font-weight:800;font-size:12px; }
+    .setting-desc { display:block;margin-top:4px;color:var(--muted);font-size:10px;line-height:1.4; }
     .switch { position:relative;width:44px;height:25px;border:0;border-radius:999px;background:#343b4d;padding:3px;cursor:pointer;flex:0 0 44px; }
     .switch:after { content:"";display:block;width:19px;height:19px;border-radius:50%;background:#bec5d2;transition:transform .16s,background .16s; }
     .switch.on { background:#6255b2; }
@@ -164,7 +165,7 @@
       <div class="setting">
         <span class="setting-icon">5s</span>
         <span class="setting-copy"><span class="setting-title">Impulso de carregamento</span><span class="setting-desc">Ativa o modo Game Loading do Android por até 5 segundos ao iniciar o Roblox.</span></span>
-        <span class="badge">ATIVO</span>
+        <span class="badge" id="loadingBoostBadge">AGUARDANDO</span>
       </div>
     </section>
 
@@ -180,7 +181,7 @@
       <span class="status-mark"></span>
       <span class="status-text" id="statusText">Escolha um perfil e aplique as alterações ao cliente Roblox.</span>
     </section>
-    <div class="footer">RbxMicroFix 0.2.2 · Android Game Mode · Shizuku<br>As alterações são específicas para com.roblox.client.</div>
+    <div class="footer">RbxMicroFix 0.2.3 · Android Game Mode · Shizuku<br>As alterações são específicas para com.roblox.client.</div>
   </main>
 
   <div class="overlay" id="restartDialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
@@ -196,7 +197,7 @@
 
   <script>
     (() => {
-      const state = { profile: 'HYBRID', fps60: false, useAngle: false, busy: false, canRestore: false };
+      const state = { profile: 'HYBRID', fps60: false, useAngle: false, busy: false, canRestore: false, loadingBoostConfigured: false };
       const $ = (id) => document.getElementById(id);
       const setSwitch = (element, enabled) => {
         element.classList.toggle('on', enabled);
@@ -213,6 +214,7 @@
         state.fps60 = !!data.fps60;
         state.useAngle = !!data.useAngle;
         state.canRestore = !!data.canRestore;
+        state.loadingBoostConfigured = !!data.loadingBoostConfigured;
         setBusy(!!data.busy);
         $('statusText').textContent = data.status || 'Pronto para aplicar.';
         $('restoreButton').disabled = state.busy || !state.canRestore;
@@ -221,6 +223,9 @@
         $('connectionText').textContent = data.shizukuReady ? 'CONECTADO' : 'SHIZUKU';
         setSwitch($('fpsSwitch'), state.fps60);
         setSwitch($('angleSwitch'), state.useAngle);
+        const boostBadge = $('loadingBoostBadge');
+        boostBadge.textContent = state.loadingBoostConfigured ? 'ATIVO' : 'AGUARDANDO';
+        boostBadge.classList.toggle('badge-muted', !state.loadingBoostConfigured);
         document.querySelectorAll('.profile').forEach(card => {
           card.classList.toggle('selected', card.dataset.profile === state.profile);
         });
