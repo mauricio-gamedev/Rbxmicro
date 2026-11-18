@@ -48,6 +48,18 @@ Optional micro-corrections:
 - Application ID: `io.github.astromg01.rbxmicrofix`.
 - Kotlin + Android WebView + Shizuku API.
 
+## Safe migration from the 0.2.2 CI APK
+
+GitHub-hosted runners generate different debug signing certificates, so Android may reject the new APK as an in-place update. Do not uninstall the old app until its recovery snapshot has been preserved.
+
+1. Keep RbxMicroFix 0.2.2 installed and keep Shizuku running.
+2. Install and open the separate **RbxMicroFix Snapshot Migrator** APK from the same CI run.
+3. Grant the migrator Shizuku permission and tap **Salvar snapshot**. It uses Android `run-as` to read only the old app's `rbx_microfix_state.xml`; it does not alter system settings.
+4. Only after the migrator confirms the snapshot was saved, uninstall the old RbxMicroFix and install the new 0.2.4 APK.
+5. On first launch, RbxMicroFix imports the saved original Game Mode and overlay snapshot. Use **Restaurar configuração original** before applying a new profile.
+
+The migration provider only allows the RbxMicroFix package to read the exported snapshot. Keep the migrator installed until the new app confirms that the snapshot has been imported and restoration is complete.
+
 ## Shizuku
 
 Shizuku is used with its shell identity; no root is requested. On a non-rooted device, start Shizuku using Android Wireless debugging. Download: <https://shizuku.rikka.app/download/>
@@ -76,4 +88,4 @@ GitHub Actions runs the unit tests and creates a debug APK artifact.
 
 ## Validation status
 
-Version 0.2.4 includes the local HTML/native connector, direct Game Mode rendering integration, a guarded Custom-mode fallback, and detailed apply/rollback errors. Unit tests cover overlay composition, profile values, loading boost and Game Mode parsing. GitHub Actions and physical validation on the Galaxy A06 are the next execution checks; no measured FPS improvement is claimed before those tests.
+Version 0.2.4 includes the local HTML/native connector, direct Game Mode rendering integration, a guarded Custom-mode fallback, detailed apply/rollback errors, and a one-time snapshot migrator for the 0.2.2 CI APK. Unit tests cover overlay composition, profile values, loading boost and Game Mode parsing. GitHub Actions and physical validation on the Galaxy A06 are the next execution checks; no measured FPS improvement is claimed before those tests.
