@@ -180,8 +180,14 @@ class MainActivity : ComponentActivity() {
             when (val result = repository.apply(profile, fps60, useAngle)) {
                 is OptimizerResult.Applied -> {
                     statusMessage = buildString {
-                        append("Perfil ${result.profile.title} aplicado ao Roblox.")
-                        append(" Reinicie o cliente para a nova intervenção entrar na renderização.")
+                        if (result.usedGameManagerOverride) {
+                            append("Perfil ${result.profile.title} aplicado pelo GameManager do Android.")
+                            append(" O backbuffer do Roblox foi configurado. ANGLE e impulso de carregamento não foram incluídos nesta rota.")
+                        } else {
+                            append("Perfil ${result.profile.title} aplicado ao perfil gráfico do Roblox.")
+                            if (result.extrasConfigured) append(" ANGLE e impulso de carregamento foram incluídos.")
+                        }
+                        append(" Reinicie o cliente para carregar as alterações.")
                     }
                 }
                 OptimizerResult.PermissionFailure -> statusMessage = "Autorize o RbxMicroFix no Shizuku e tente novamente."
@@ -263,6 +269,7 @@ class MainActivity : ComponentActivity() {
             .put("activeProfile", repository.activeProfile()?.name ?: JSONObject.NULL)
             .put("fps60", repository.fps60Enabled())
             .put("useAngle", repository.angleEnabled())
+            .put("loadingBoostConfigured", repository.loadingBoostConfigured())
             .put("canRestore", repository.canRestore())
             .toString()
         webView.post {
@@ -279,6 +286,7 @@ class MainActivity : ComponentActivity() {
             .put("activeProfile", repository.activeProfile()?.name ?: JSONObject.NULL)
             .put("fps60", repository.fps60Enabled())
             .put("useAngle", repository.angleEnabled())
+            .put("loadingBoostConfigured", repository.loadingBoostConfigured())
             .put("canRestore", repository.canRestore())
             .toString()
 
