@@ -8,7 +8,7 @@ class GameOverlayConfigTest {
     @Test
     fun createsPerformanceModeWhenNoOverlayExists() {
         assertEquals(
-            "mode=2,downscaleFactor=0.85,fps=disable,useAngle=false",
+            "mode=2,downscaleFactor=0.85,fps=disable,useAngle=false,loadingBoost=5000",
             GameOverlayConfig.withPerformanceProfile(null, "0.85", "disable", false),
         )
     }
@@ -18,16 +18,16 @@ class GameOverlayConfigTest {
         val original = "mode=2,downscaleFactor=0.9:mode=3,downscaleFactor=0.5,fps=30"
         val result = GameOverlayConfig.withPerformanceProfile(original, "0.8", "60", true)
         assertEquals(
-            "mode=3,downscaleFactor=0.5,fps=30:mode=2,downscaleFactor=0.8,fps=60,useAngle=true",
+            "mode=3,downscaleFactor=0.5,fps=30:mode=2,downscaleFactor=0.8,fps=60,useAngle=true,loadingBoost=5000",
             result,
         )
     }
 
     @Test
-    fun preservesUnknownPerformanceKeys() {
+    fun preservesUnknownPerformanceKeysAndReplacesLoadingBoost() {
         val original = "mode=2,downscaleFactor=0.7,loadingBoost=3000,customKey=value:mode=3,fps=30"
         val result = GameOverlayConfig.withPerformanceProfile(original, "0.9", "disable", false)
-        assertTrue(result.contains("loadingBoost=3000"))
+        assertTrue(result.contains("loadingBoost=5000"))
         assertTrue(result.contains("customKey=value"))
         assertTrue(result.contains("mode=3,fps=30"))
         assertTrue(result.contains("downscaleFactor=0.9"))
@@ -50,6 +50,11 @@ class PerformanceProfileTest {
         assertTrue(PerformanceProfile.entries.all {
             it.downscaleFactor in GameOverlayConfig.allowedDownscaleFactors
         })
+    }
+
+    @Test
+    fun configUsesSupportedMaximumLoadingBoostDuration() {
+        assertEquals(5_000, GameOverlayConfig.LOADING_BOOST_DURATION_MS)
     }
 
     @Test
