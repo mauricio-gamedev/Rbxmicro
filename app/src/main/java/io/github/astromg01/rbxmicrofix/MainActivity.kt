@@ -191,8 +191,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 OptimizerResult.PermissionFailure -> statusMessage = "Autorize o RbxMicroFix no Shizuku e tente novamente."
-                OptimizerResult.RollbackFailure -> statusMessage = "A aplicação foi interrompida. Use Restaurar configuração para concluir a reversão."
-                else -> statusMessage = "Não foi possível aplicar o perfil. A configuração anterior foi preservada quando a reversão foi concluída."
+                is OptimizerResult.RollbackFailure -> statusMessage =
+                    "A aplicação falhou durante a reversão: ${result.details}. Use Restaurar configuração para tentar novamente."
+                is OptimizerResult.OperationFailure -> statusMessage =
+                    "Não foi possível aplicar o perfil: ${result.details}"
+                else -> statusMessage = "Não foi possível aplicar o perfil."
             }
             busy = false
             publishState()
@@ -210,6 +213,10 @@ class MainActivity : ComponentActivity() {
                 OptimizerResult.Restored -> statusMessage = "Configuração original restaurada. Reinicie o Roblox para aplicar a restauração."
                 OptimizerResult.NothingToRestore -> statusMessage = "Nenhuma alteração do RbxMicroFix está ativa."
                 OptimizerResult.PermissionFailure -> statusMessage = "Autorize o RbxMicroFix no Shizuku e tente novamente."
+                is OptimizerResult.OperationFailure -> statusMessage =
+                    "Restauração incompleta: ${result.details}. Tente novamente."
+                is OptimizerResult.RollbackFailure -> statusMessage =
+                    "Restauração incompleta: ${result.details}. Tente novamente."
                 else -> statusMessage = "Não foi possível concluir a restauração."
             }
             busy = false
