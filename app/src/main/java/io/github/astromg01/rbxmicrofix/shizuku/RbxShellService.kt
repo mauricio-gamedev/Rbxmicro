@@ -44,9 +44,12 @@ class RbxShellService : IRbxShellService.Stub() {
             )
         }.getOrElse { return "ERR|invalid_overlay" }
 
+        // The custom-mode shell fallback stores a per-user override. Only use it
+        // when list-configs confirms there is no existing intervention to preserve.
+        val customFallback = canSafelyUseCustomModeFallback()
+
         var overlayChanged = false
         var directFailure = "not_attempted"
-        var managerOverrideAttempted = false
 
         // Preferred route: write the complete per-package overlay so ANGLE and
         // loadingBoost are included alongside backbuffer scaling and FPS.
@@ -71,24 +74,41 @@ class RbxShellService : IRbxShellService.Stub() {
                 current != if (originalOverlayWasAbsent) ABSENT_CONFIG else originalOverlay
         }
 
-        // Fallback route: GameManagerService's own API. It applies a real mode-2
-        // downscale/FPS override and selects that mode as part of the operation.
-        // Android expects "disable" (not numeric zero) when no FPS cap is requested.
+        if (!customFallback.first) {
+            val rollback = rollback(
+                previousMode = previousMode,
+                originalOverlay = originalOverlay,
+                originalOverlayWasAbsent = originalOverlayWasAbsent,
+                overlayChanged = overlayChanged,
+                managerOverrideMayExist = false,
+            )
+            return if (rollback) {
+                "ERR|apply_failed|direct=${compact(directFailure)}|custom_fallback_blocked=${compact(customFallback.second)}|rollback=ok"
+            } else {
+                "ERR|rollback_failed|direct=${compact(directFailure)}|custom_fallback_blocked=${compact(customFallback.second)}|overlay=${describeOverlayState(originalOverlay, originalOverlayWasAbsent)}|mode=${describeModeState(previousMode)}"
+            }
+        }
+
+        // Android 14+ provides the always-available Custom game mode (4).
+        // Unlike Performance mode, it does not require the game to opt in.
+        // In this API --fps is numeric and 0 disables the cap.
         val fpsArgument = if (fpsOverride == FPS_60) FPS_60 else FPS_DISABLED
         val managerApply = execute(
             listOf(
                 CMD, "game", "set",
-                "--mode", PERFORMANCE_MODE.toString(),
+                "--mode", CUSTOM_MODE.toString(),
                 "--downscale", downscaleFactor,
                 "--fps", fpsArgument,
                 ROBLOX_PACKAGE,
             ),
         )
 
-        val managerOverrideCreated = managerApply.exitCode == 0
-        if (managerOverrideCreated && waitForMode(PERFORMANCE_MODE)) {
-            // GameManagerService's override takes precedence for this mode. Restore
-            // the temporary DeviceConfig write so it does not leave a shadow profile.
+        // The command may have changed persistent user settings even if the
+        // shell process timed out or returned an error; rollback must attempt reset.
+        val managerOverrideMayExist = true
+        if (managerApply.exitCode == 0 && waitForMode(CUSTOM_MODE)) {
+            // The manager override now owns the active Custom mode. Restore any
+            // temporary DeviceConfig write to avoid leaving a second profile.
             val cleanup = if (overlayChanged) {
                 restoreOverlay(originalOverlay, originalOverlayWasAbsent)
             } else {
@@ -107,13 +127,13 @@ class RbxShellService : IRbxShellService.Stub() {
             originalOverlay = originalOverlay,
             originalOverlayWasAbsent = originalOverlayWasAbsent,
             overlayChanged = overlayChanged,
-            managerOverrideMayExist = managerOverrideCreated,
+            managerOverrideMayExist = managerOverrideMayExist,
         )
 
         return if (rollback) {
-            "ERR|apply_failed|direct=${compact(directFailure)}|game_manager=${compact(managerFailure)}|rollback=ok"
+            "ERR|apply_failed|direct=${compact(directFailure)}|custom_mode=${compact(managerFailure)}|rollback=ok"
         } else {
-            "ERR|rollback_failed|manager_override_possible=1|direct=${compact(directFailure)}|game_manager=${compact(managerFailure)}|overlay=${describeOverlayState(originalOverlay, originalOverlayWasAbsent)}|mode=${describeModeState(previousMode)}"
+            "ERR|rollback_failed|custom_override_possible=1|direct=${compact(directFailure)}|custom_mode=${compact(managerFailure)}|overlay=${describeOverlayState(originalOverlay, originalOverlayWasAbsent)}|mode=${describeModeState(previousMode)}"
         }
     }
 
@@ -153,6 +173,17 @@ class RbxShellService : IRbxShellService.Stub() {
 
     override fun exit() {
         destroy()
+    }
+
+    private fun canSafelyUseCustomModeFallback(): Pair<Boolean, String> {
+        val result = execute(listOf(CMD, "game", "list-configs", ROBLOX_PACKAGE))
+        if (result.exitCode != 0) {
+            return false to "list-configs unavailable: ${describe(result)}"
+        }
+        if (!GameModeParser.reportsNoInterventionConfig(result.output)) {
+            return false to "an existing GameManager intervention was found; refusing to replace it"
+        }
+        return true to ""
     }
 
     private fun selectPerformanceMode(): Pair<Boolean, String> {
@@ -227,7 +258,7 @@ class RbxShellService : IRbxShellService.Stub() {
     }
 
     private fun resetGameManagerOverride(): ShellResult =
-        execute(listOf(CMD, "game", "reset", "--mode", "performance", ROBLOX_PACKAGE))
+        execute(listOf(CMD, "game", "reset", ROBLOX_PACKAGE))
 
     private fun restoreOverlay(original: String, wasAbsent: Boolean): Boolean {
         val expected = if (wasAbsent) ABSENT_CONFIG else original
@@ -310,7 +341,7 @@ class RbxShellService : IRbxShellService.Stub() {
         const val MAX_ERROR_LENGTH = 170
         const val ABSENT_CONFIG = "null"
         const val FPS_60 = "60"
-        const val FPS_DISABLED = "disable"
+        const val FPS_DISABLED = "0"
         const val UNSUPPORTED_MODE = 0
         const val PERFORMANCE_MODE = 2
         const val BATTERY_MODE = 3
