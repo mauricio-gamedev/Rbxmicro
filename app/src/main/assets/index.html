@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="color-scheme" content="dark">
+  <title>RbxMicroFix</title>
+  <style>
+    :root {
+      --bg: #090b12;
+      --panel: #121724;
+      --panel-2: #171e2e;
+      --line: rgba(168, 176, 205, .13);
+      --text: #f4f5fb;
+      --muted: #929bb0;
+      --accent: #a99aff;
+      --accent-2: #73e0c2;
+      --danger: #ff8795;
+      --radius: 22px;
+      font-family: Inter, Roboto, "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--text); background:
+        radial-gradient(ellipse at 8% -8%, rgba(130, 108, 255, .19), transparent 46%),
+        radial-gradient(ellipse at 105% 24%, rgba(56, 190, 160, .10), transparent 36%), var(--bg);
+      padding: 22px 18px 34px;
+    }
+    .wrap { width: 100%; max-width: 540px; margin: 0 auto; }
+    .top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; }
+    .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+    .mark {
+      width:47px;height:47px;border-radius:16px;display:grid;place-items:center;
+      color:#171427;font-weight:950;font-size:26px;letter-spacing:-2px;
+      background:linear-gradient(145deg,#c2b8ff,#8978ff 62%,#6a57d9);
+      box-shadow:0 8px 30px rgba(127,106,255,.24);
+    }
+    .brand-name { font-weight:850;font-size:19px;letter-spacing:-.55px; }
+    .brand-sub { margin-top:3px;color:var(--muted);font-size:9px;font-weight:800;letter-spacing:1.35px; }
+    .pill { display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:8px 10px;color:var(--muted);font-size:9px;font-weight:850;letter-spacing:.6px;white-space:nowrap; }
+    .dot { width:7px;height:7px;border-radius:50%;background:#e3ad70;box-shadow:0 0 12px rgba(227,173,112,.45); }
+    .pill.ready { color:#8de6c7;border-color:rgba(115,224,194,.2);background:rgba(115,224,194,.07); }
+    .pill.ready .dot { background:var(--accent-2);box-shadow:0 0 12px rgba(115,224,194,.7); }
+    .hero {
+      position:relative;overflow:hidden;padding:23px 21px 22px;border:1px solid rgba(169,154,255,.19);border-radius:26px;
+      background:linear-gradient(135deg,rgba(74,62,135,.37),rgba(19,25,39,.94) 61%);box-shadow:0 18px 52px rgba(0,0,0,.18);margin-bottom:24px;
+    }
+    .hero:after { content:"";position:absolute;width:170px;height:170px;right:-76px;top:-85px;border-radius:50%;border:1px solid rgba(185,174,255,.18);box-shadow:0 0 0 19px rgba(185,174,255,.035),0 0 0 39px rgba(185,174,255,.025); }
+    .eyebrow { position:relative;z-index:1;color:#bdb2ff;font-size:9px;font-weight:900;letter-spacing:1.65px; }
+    h1 { position:relative;z-index:1;font-size:25px;line-height:1.17;letter-spacing:-.8px;margin:11px 0 8px;max-width:330px; }
+    .hero p { position:relative;z-index:1;color:#a8b0c1;font-size:12px;line-height:1.65;margin:0;max-width:360px; }
+    .section-head { display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 2px 11px; }
+    .section-head h2 { margin:0;color:#abb3c5;font-size:10px;font-weight:900;letter-spacing:1.55px; }
+    .hint { color:#737e95;font-size:10px; }
+    .profiles { display:grid;gap:10px; }
+    .profile {
+      display:flex;align-items:center;gap:13px;width:100%;padding:15px 14px;text-align:left;color:var(--text);
+      border-radius:18px;border:1px solid var(--line);background:rgba(18,23,36,.89);cursor:pointer;transition:border-color .16s,background .16s,transform .16s;
+    }
+    .profile:active { transform:scale(.99); }
+    .profile.selected { border-color:rgba(169,154,255,.73);background:linear-gradient(120deg,rgba(115,99,202,.22),rgba(21,27,42,.98));box-shadow:inset 0 0 0 1px rgba(169,154,255,.09); }
+    .profile-icon { width:40px;height:40px;flex:0 0 40px;border-radius:13px;background:#24243b;color:#c9c0ff;display:grid;place-items:center;font-size:13px;font-weight:900; }
+    .profile-body { min-width:0;flex:1; }
+    .profile-title { display:flex;align-items:center;gap:8px;font-size:14px;font-weight:850; }
+    .profile-desc { color:var(--muted);font-size:10px;line-height:1.45;margin-top:4px; }
+    .scale { color:#d2cbff;font-size:13px;font-weight:900;white-space:nowrap; }
+    .badge { padding:3px 6px;border-radius:6px;background:rgba(115,224,194,.12);color:#85e4c4;font-size:8px;letter-spacing:.65px; }
+    .settings { border:1px solid var(--line);border-radius:19px;background:rgba(18,23,36,.86);overflow:hidden; }
+    .setting { display:flex;align-items:center;gap:13px;padding:15px 15px; }
+    .setting + .setting { border-top:1px solid var(--line); }
+    .setting-icon { width:33px;height:33px;border-radius:11px;background:#20283a;display:grid;place-items:center;color:#b9b0ff;font-size:14px;font-weight:900; }
+    .setting-copy { flex:1;min-width:0; }
+    .setting-title { font-weight:800;font-size:12px; }
+    .setting-desc { margin-top:4px;color:var(--muted);font-size:10px;line-height:1.4; }
+    .switch { position:relative;width:44px;height:25px;border:0;border-radius:999px;background:#343b4d;padding:3px;cursor:pointer;flex:0 0 44px; }
+    .switch:after { content:"";display:block;width:19px;height:19px;border-radius:50%;background:#bec5d2;transition:transform .16s,background .16s; }
+    .switch.on { background:#6255b2; }
+    .switch.on:after { transform:translateX(19px);background:#fff; }
+    .actions { display:grid;gap:10px;margin-top:18px; }
+    .btn { min-height:51px;border:0;border-radius:15px;padding:0 16px;font-family:inherit;font-weight:900;font-size:11px;letter-spacing:.8px;cursor:pointer; }
+    .btn:disabled { opacity:.45;cursor:default; }
+    .btn.primary { color:#171427;background:linear-gradient(110deg,#c0b5ff,#9988ff);box-shadow:0 10px 28px rgba(132,111,255,.18); }
+    .btn.secondary { color:#f0effa;background:#252b3b;border:1px solid var(--line); }
+    .btn.ghost { color:#b4bdcf;background:transparent;border:1px solid var(--line); }
+    .status {
+      margin-top:17px;border:1px solid var(--line);border-radius:16px;background:rgba(15,20,31,.8);padding:13px 14px;
+      display:flex;align-items:flex-start;gap:10px;
+    }
+    .status-mark { width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--accent-2);margin-top:4px; }
+    .status-text { color:#aeb7c9;font-size:10px;line-height:1.55; }
+    .footer { text-align:center;color:#626e84;font-size:9px;line-height:1.6;margin:18px 8px 0; }
+    .overlay { position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(4,6,11,.76);backdrop-filter:blur(10px);z-index:5; }
+    .overlay.show { display:flex; }
+    .dialog { width:100%;max-width:380px;border:1px solid var(--line);border-radius:22px;background:#151b29;padding:21px;box-shadow:0 24px 70px rgba(0,0,0,.48); }
+    .dialog h3 { margin:0 0 9px;font-size:17px; }
+    .dialog p { margin:0;color:var(--muted);font-size:11px;line-height:1.6; }
+    .dialog-actions { display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:19px; }
+    .dialog-actions .btn { min-height:45px;font-size:10px; }
+    .busy .profile,.busy .switch { pointer-events:none;opacity:.62; }
+    @media (min-width:500px) { body { padding-top:32px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="top">
+      <div class="brand">
+        <div class="mark">R</div>
+        <div>
+          <div class="brand-name">RbxMicroFix</div>
+          <div class="brand-sub">ROBLOX RENDER ENGINE</div>
+        </div>
+      </div>
+      <div class="pill" id="connection"><span class="dot"></span><span id="connectionText">SHIZUKU</span></div>
+    </header>
+
+    <section class="hero">
+      <div class="eyebrow">CLIENT-SIDE RENDER CONTROL</div>
+      <h1>Otimização aplicada ao Roblox de verdade.</h1>
+      <p>Perfis de renderização por aplicativo, ajuste de backbuffer e intervenções do Android para o cliente oficial.</p>
+    </section>
+
+    <div class="section-head">
+      <h2>PERFIL DE RENDERIZAÇÃO</h2>
+      <span class="hint">Escolha um perfil</span>
+    </div>
+    <section class="profiles" id="profiles">
+      <button class="profile" data-profile="QUALITY" type="button">
+        <span class="profile-icon">Q</span>
+        <span class="profile-body"><span class="profile-title">Nitidez</span><span class="profile-desc">Prioriza definição com ajuste gráfico leve.</span></span>
+        <span class="scale">90%</span>
+      </button>
+      <button class="profile selected" data-profile="HYBRID" type="button">
+        <span class="profile-icon">H</span>
+        <span class="profile-body"><span class="profile-title">Equilibrado <span class="badge">RECOMENDADO</span></span><span class="profile-desc">Equilíbrio entre definição e carga de renderização.</span></span>
+        <span class="scale">85%</span>
+      </button>
+      <button class="profile" data-profile="PERFORMANCE" type="button">
+        <span class="profile-icon">P</span>
+        <span class="profile-body"><span class="profile-title">Desempenho</span><span class="profile-desc">Reduz mais a carga gráfica para priorizar fluidez.</span></span>
+        <span class="scale">80%</span>
+      </button>
+      <button class="profile" data-profile="MAX_PERFORMANCE" type="button">
+        <span class="profile-icon">M</span>
+        <span class="profile-body"><span class="profile-title">Máximo</span><span class="profile-desc">Redução mais intensa do backbuffer para aliviar a GPU.</span></span>
+        <span class="scale">75%</span>
+      </button>
+    </section>
+
+    <div class="section-head">
+      <h2>MICROCORREÇÕES</h2>
+      <span class="hint">Intervenções do cliente</span>
+    </div>
+    <section class="settings">
+      <div class="setting">
+        <span class="setting-icon">60</span>
+        <span class="setting-copy"><span class="setting-title">Limite de 60 FPS</span><span class="setting-desc">Limita o Roblox a 60 FPS pelo Game Mode do Android.</span></span>
+        <button class="switch" id="fpsSwitch" type="button" role="switch" aria-checked="false" aria-label="Limite de 60 FPS"></button>
+      </div>
+      <div class="setting">
+        <span class="setting-icon">A</span>
+        <span class="setting-copy"><span class="setting-title">Compatibilidade ANGLE</span><span class="setting-desc">Solicita o driver ANGLE para OpenGL ES no perfil do Roblox.</span></span>
+        <button class="switch" id="angleSwitch" type="button" role="switch" aria-checked="false" aria-label="Usar ANGLE"></button>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button class="btn primary" id="applyButton" type="button">APLICAR NO ROBLOX</button>
+      <button class="btn secondary" id="restartButton" type="button">REINICIAR CLIENTE ROBLOX</button>
+      <button class="btn ghost" id="restoreButton" type="button">RESTAURAR CONFIGURAÇÃO ORIGINAL</button>
+      <button class="btn ghost" id="openRobloxButton" type="button">ABRIR ROBLOX</button>
+      <button class="btn ghost" id="shizukuButton" type="button">ABRIR SHIZUKU</button>
+    </section>
+
+    <section class="status" aria-live="polite">
+      <span class="status-mark"></span>
+      <span class="status-text" id="statusText">Escolha um perfil e aplique as alterações ao cliente Roblox.</span>
+    </section>
+    <div class="footer">RbxMicroFix 0.2.1 · Android Game Mode · Shizuku<br>As alterações são específicas para com.roblox.client.</div>
+  </main>
+
+  <div class="overlay" id="restartDialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+    <div class="dialog">
+      <h3 id="dialogTitle">Reiniciar o Roblox?</h3>
+      <p>O cliente será encerrado imediatamente e aberto novamente para carregar a nova configuração de renderização. Saia da partida antes de continuar.</p>
+      <div class="dialog-actions">
+        <button class="btn ghost" id="cancelRestart" type="button">CANCELAR</button>
+        <button class="btn primary" id="confirmRestart" type="button">REINICIAR</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const state = { profile: 'HYBRID', fps60: false, useAngle: false, busy: false, canRestore: false };
+      const $ = (id) => document.getElementById(id);
+      const setSwitch = (element, enabled) => {
+        element.classList.toggle('on', enabled);
+        element.setAttribute('aria-checked', String(enabled));
+      };
+      const setBusy = (busy) => {
+        state.busy = !!busy;
+        document.body.classList.toggle('busy', state.busy);
+        ['applyButton','restartButton','restoreButton','openRobloxButton','shizukuButton'].forEach(id => $(id).disabled = state.busy);
+      };
+      const applyNativeState = (data) => {
+        if (!data) return;
+        if (data.activeProfile) state.profile = data.activeProfile;
+        state.fps60 = !!data.fps60;
+        state.useAngle = !!data.useAngle;
+        state.canRestore = !!data.canRestore;
+        setBusy(!!data.busy);
+        $('statusText').textContent = data.status || 'Pronto para aplicar.';
+        $('restoreButton').disabled = state.busy || !state.canRestore;
+        $('restartButton').disabled = state.busy;
+        $('connection').classList.toggle('ready', !!data.shizukuReady);
+        $('connectionText').textContent = data.shizukuReady ? 'CONECTADO' : 'SHIZUKU';
+        setSwitch($('fpsSwitch'), state.fps60);
+        setSwitch($('angleSwitch'), state.useAngle);
+        document.querySelectorAll('.profile').forEach(card => {
+          card.classList.toggle('selected', card.dataset.profile === state.profile);
+        });
+      };
+      window.RbxUI = { onNativeState: applyNativeState };
+      try { applyNativeState(JSON.parse(window.RbxNative.getState())); } catch (_) {}
+
+      document.querySelectorAll('.profile').forEach(card => {
+        card.addEventListener('click', () => {
+          if (state.busy) return;
+          state.profile = card.dataset.profile;
+          document.querySelectorAll('.profile').forEach(item => item.classList.toggle('selected', item === card));
+        });
+      });
+      $('fpsSwitch').addEventListener('click', () => {
+        if (state.busy) return;
+        state.fps60 = !state.fps60;
+        setSwitch($('fpsSwitch'), state.fps60);
+      });
+      $('angleSwitch').addEventListener('click', () => {
+        if (state.busy) return;
+        state.useAngle = !state.useAngle;
+        setSwitch($('angleSwitch'), state.useAngle);
+      });
+      $('applyButton').addEventListener('click', () => {
+        if (state.busy) return;
+        window.RbxNative.applyProfile(state.profile, state.fps60, state.useAngle);
+      });
+      $('restartButton').addEventListener('click', () => $('restartDialog').classList.add('show'));
+      $('cancelRestart').addEventListener('click', () => $('restartDialog').classList.remove('show'));
+      $('confirmRestart').addEventListener('click', () => {
+        $('restartDialog').classList.remove('show');
+        if (!state.busy) window.RbxNative.restartRoblox();
+      });
+      $('restoreButton').addEventListener('click', () => {
+        if (!state.busy && state.canRestore) window.RbxNative.restoreOriginal();
+      });
+      $('openRobloxButton').addEventListener('click', () => window.RbxNative.launchRoblox());
+      $('shizukuButton').addEventListener('click', () => window.RbxNative.openShizuku());
+    })();
+  </script>
+</body>
+</html>
