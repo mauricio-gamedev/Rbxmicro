@@ -1,6 +1,8 @@
 package io.github.astromg01.rbxmicrofix.data
 
 import android.content.Context
+import android.net.Uri
+import android.util.Xml
 import io.github.astromg01.rbxmicrofix.core.GameModeParser
 import io.github.astromg01.rbxmicrofix.core.PerformanceProfile
 import io.github.astromg01.rbxmicrofix.shizuku.ShizukuGateway
@@ -181,6 +183,66 @@ class OptimizerRepository(context: Context) {
     fun angleEnabled(): Boolean = preferences.getBoolean(KEY_USE_ANGLE, false)
     fun loadingBoostConfigured(): Boolean = preferences.getBoolean(KEY_EXTRAS_CONFIGURED, false)
 
+    /**
+     * Imports the old 0.2.2 recovery snapshot through the one-time migrator app.
+     * It is read-only: the migrator keeps the exported copy until the user confirms
+     * that restoration in this app has completed.
+     */
+    fun importLegacyRecoverySnapshot(): Boolean {
+        if (canRestore()) return false
+
+        return try {
+            val uri = Uri.parse(LEGACY_SNAPSHOT_URI)
+            val input = context.contentResolver.openInputStream(uri) ?: return false
+            val values = mutableMapOf<String, Any>()
+
+            input.use { stream ->
+                val parser = Xml.newPullParser()
+                parser.setInput(stream, "UTF-8")
+                var event = parser.eventType
+                while (event != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                    if (event == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                        val name = parser.getAttributeValue(null, "name")
+                        if (name != null) {
+                            when (parser.name) {
+                                "string" -> values[name] = parser.nextText()
+                                "boolean" -> {
+                                    parser.getAttributeValue(null, "value")?.toBooleanStrictOrNull()
+                                        ?.let { values[name] = it }
+                                }
+                                "int", "long" -> {
+                                    parser.getAttributeValue(null, "value")?.toLongOrNull()
+                                        ?.let { values[name] = it }
+                                }
+                            }
+                        }
+                    }
+                    event = parser.next()
+                }
+            }
+
+            val previousMode = values[KEY_PREVIOUS_MODE] as? String ?: return false
+            val previousOverlay = values[KEY_PREVIOUS_OVERLAY] as? String ?: return false
+            if (previousMode.toIntOrNull() !in 0..4) return false
+
+            val editor = preferences.edit()
+                .putString(KEY_PREVIOUS_MODE, previousMode)
+                .putString(KEY_PREVIOUS_OVERLAY, previousOverlay)
+                .putBoolean(KEY_MANAGER_OVERRIDE_ACTIVE, false)
+                .putBoolean(KEY_EXTRAS_CONFIGURED, false)
+                .putBoolean(KEY_PROFILE_ACTIVE, values[KEY_PROFILE_ACTIVE] as? Boolean ?: false)
+                .putBoolean(KEY_FPS_60, values[KEY_FPS_60] as? Boolean ?: false)
+                .putBoolean(KEY_USE_ANGLE, values[KEY_USE_ANGLE] as? Boolean ?: false)
+
+            (values[KEY_ACTIVE_PROFILE] as? String)?.let {
+                editor.putString(KEY_ACTIVE_PROFILE, it)
+            }
+            editor.commit()
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     fun canRestore(): Boolean =
         preferences.contains(KEY_PREVIOUS_MODE) && preferences.contains(KEY_PREVIOUS_OVERLAY)
 
@@ -218,6 +280,7 @@ class OptimizerRepository(context: Context) {
     }
 
     private companion object {
+        const val LEGACY_SNAPSHOT_URI = "content://io.github.astromg01.rbxmicrofix.migrator.snapshot/snapshot"
         const val PREFERENCES_NAME = "rbx_microfix_state"
         const val KEY_PROFILE_ACTIVE = "profile_active"
         const val KEY_ACTIVE_PROFILE = "active_profile"
