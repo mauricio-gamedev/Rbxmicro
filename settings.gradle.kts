@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "RbxMicroFix"
-include(":app")
+include(":app", ":migrator")
