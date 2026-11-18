@@ -3,6 +3,7 @@
     <queries>
         <package android:name="com.roblox.client" />
         <package android:name="moe.shizuku.privileged.api" />
+        <provider android:authorities="io.github.astromg01.rbxmicrofix.migrator.snapshot" />
     </queries>
 
     <application
