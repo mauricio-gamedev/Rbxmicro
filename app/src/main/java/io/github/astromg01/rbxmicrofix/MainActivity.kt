@@ -71,6 +71,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repository = OptimizerRepository(applicationContext)
+        if (repository.importLegacyRecoverySnapshot()) {
+            statusMessage = "Snapshot antigo importado. Use Restaurar configuração para concluir a reversão salva pela versão anterior."
+        }
         shizukuReady = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
 
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
