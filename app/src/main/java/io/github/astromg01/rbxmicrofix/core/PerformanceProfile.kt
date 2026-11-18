@@ -104,7 +104,7 @@ object GameModeParser {
      * use only when GameManager confirms there is no existing intervention config.
      */
     fun reportsNoInterventionConfig(commandOutput: String): Boolean =
-        commandOutput.contains("no intervention found", ignoreCase = true)
+        Regex("no interventions? found", RegexOption.IGNORE_CASE).containsMatchIn(commandOutput)
 
     fun modeName(mode: Int): String = when (mode) {
         1 -> "standard"
