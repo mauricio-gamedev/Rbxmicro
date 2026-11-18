@@ -4,15 +4,15 @@ interface IRbxShellService {
     void destroy() = 16777114;
     void exit() = 1;
 
-    String getCurrentGameMode();
-    String getCurrentOverlayConfig();
+    String getCurrentGameMode() = 2;
+    String getCurrentOverlayConfig() = 3;
     String applyRenderingProfile(
         String downscaleFactor,
         String fpsOverride,
         boolean useAngle,
         String previousGameMode,
         String previousOverlayConfig
-    );
-    String restoreOriginalState(String previousGameMode, String previousOverlayConfig);
-    String forceStopRoblox();
+    ) = 4;
+    String restoreOriginalState(String previousGameMode, String previousOverlayConfig) = 5;
+    String forceStopRoblox() = 6;
 }
