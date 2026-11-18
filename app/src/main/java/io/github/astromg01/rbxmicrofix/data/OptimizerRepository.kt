@@ -223,7 +223,7 @@ class OptimizerRepository(context: Context) {
 
             val previousMode = values[KEY_PREVIOUS_MODE] as? String ?: return false
             val previousOverlay = values[KEY_PREVIOUS_OVERLAY] as? String ?: return false
-            if (previousMode.toIntOrNull() !in 0..4) return false
+            if (previousMode.toIntOrNull()?.let { it in 0..4 } != true) return false
 
             val editor = preferences.edit()
                 .putString(KEY_PREVIOUS_MODE, previousMode)
