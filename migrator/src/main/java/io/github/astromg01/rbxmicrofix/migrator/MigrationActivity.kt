@@ -32,7 +32,8 @@ class MigrationActivity : Activity() {
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         runOnUiThread {
-            status.text = "Shizuku conectado. Toque em Salvar snapshot."
+            status.text = "Shizuku conectado. Mantenha o app anterior instalado e salve o snapshot."
+            exportButton.text = "SALVAR SNAPSHOT"
             exportButton.isEnabled = true
         }
     }
@@ -78,7 +79,7 @@ class MigrationActivity : Activity() {
         Shizuku.addRequestPermissionResultListener(permissionListener)
 
         if (!isLegacyAppInstalled()) {
-            status.text = "O RbxMicroFix 0.2.2 não está instalado. Não há snapshot antigo para migrar."
+            status.text = "O RbxMicroFix anterior não está instalado. Não há snapshot para migrar."
             exportButton.isEnabled = false
         } else if (runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
             status.text = "Mantenha o RbxMicroFix antigo instalado. O Shizuku está conectado."
