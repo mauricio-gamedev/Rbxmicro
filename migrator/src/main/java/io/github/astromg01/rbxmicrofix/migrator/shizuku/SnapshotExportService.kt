@@ -1,10 +1,8 @@
 package io.github.astromg01.rbxmicrofix.migrator.shizuku
 
 import android.util.Base64
-import androidx.annotation.Keep
 import java.util.concurrent.TimeUnit
 
-@Keep
 class SnapshotExportService : ISnapshotExportService.Stub() {
 
     override fun exportLegacySnapshot(): String {
