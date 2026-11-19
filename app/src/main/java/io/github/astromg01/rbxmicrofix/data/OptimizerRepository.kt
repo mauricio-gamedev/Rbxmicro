@@ -26,7 +26,8 @@ sealed interface OptimizerResult {
 }
 
 class OptimizerRepository(context: Context) {
-    private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val gateway = ShizukuGateway(context)
 
     suspend fun apply(
@@ -193,7 +194,7 @@ class OptimizerRepository(context: Context) {
 
         return try {
             val uri = Uri.parse(LEGACY_SNAPSHOT_URI)
-            val input = context.contentResolver.openInputStream(uri) ?: return false
+            val input = appContext.contentResolver.openInputStream(uri) ?: return false
             val values = mutableMapOf<String, Any>()
 
             input.use { stream ->
